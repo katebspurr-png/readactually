@@ -2,30 +2,39 @@ import { FilterBar } from "@/components/filter-bar";
 import { ItemList } from "@/components/item-list";
 import { saveManualUrl } from "@/app/actions";
 import { getDashboardStats, getSavedItems } from "@/lib/queries";
+import type { ItemListFilters } from "@/lib/types";
+import { isValidSource, isValidStatus } from "@/lib/types";
 
 export default async function InboxPage({
-  searchParams
+  searchParams,
 }: {
-  searchParams: Promise<{ q?: string; source?: string; tag?: string; status?: string; saved?: string }>;
+  searchParams: Promise<Record<string, string | undefined>>;
 }) {
-  const filters = await searchParams;
-  const [items, stats] = await Promise.all([getSavedItems(filters), getDashboardStats()]);
+  const params = await searchParams;
+
+  const filters: ItemListFilters = {
+    q: params.q,
+    status: isValidStatus(params.status ?? "") ? params.status as ItemListFilters["status"] : undefined,
+    source: isValidSource(params.source ?? "") ? params.source as ItemListFilters["source"] : undefined,
+    tag: params.tag,
+  };
+
+  const [items, stats] = await Promise.all([
+    getSavedItems(filters),
+    getDashboardStats(),
+  ]);
 
   return (
     <div className="stack">
       <section className="hero stack">
         <div>
           <p className="muted">Inbox</p>
-          <h2>Capture first, then triage with intent.</h2>
-          <p>
-            Manual saves land here by default, and imports feed the same normalized queue so reading decisions stay
-            in one place.
-          </p>
+          <h2>Capture first, triage with intent.</h2>
         </div>
         <div className="stats">
           <div className="stat">
             <strong>{stats.total}</strong>
-            <span>Total items</span>
+            <span>Total</span>
           </div>
           <div className="stat">
             <strong>{stats.inbox}</strong>
@@ -44,14 +53,22 @@ export default async function InboxPage({
 
       <section className="panel">
         <h2>Save a URL</h2>
-        {filters.saved ? <p style={{ color: "var(--success)" }}>Saved to your inbox.</p> : null}
+        {params.saved ? (
+          <p className="success-msg">Saved to your inbox.</p>
+        ) : null}
+        {params.error ? <p className="error-msg">{params.error}</p> : null}
         <form action={saveManualUrl} className="toolbar">
           <div className="field" style={{ flex: 2 }}>
             <label htmlFor="url">URL</label>
-            <input id="url" name="url" placeholder="https://example.com/article" required />
+            <input
+              id="url"
+              name="url"
+              placeholder="https://example.com/article"
+              required
+            />
           </div>
           <div className="field">
-            <label htmlFor="title">Optional title</label>
+            <label htmlFor="title">Title (optional)</label>
             <input id="title" name="title" placeholder="Override page title" />
           </div>
           <div className="field">
@@ -62,30 +79,30 @@ export default async function InboxPage({
             <label htmlFor="status">Status</label>
             <select defaultValue="inbox" id="status" name="status">
               <option value="inbox">inbox</option>
-              <option value="read_next">read_next</option>
+              <option value="read_next">read next</option>
               <option value="reference">reference</option>
             </select>
           </div>
-          <div className="field" style={{ flex: 1 }}>
-            <label htmlFor="note">Quick note</label>
-            <input id="note" name="note" placeholder="why save this?" />
+          <div className="field">
+            <label htmlFor="note">Note</label>
+            <input id="note" name="note" placeholder="Why save this?" />
           </div>
           <button className="button" type="submit">
-            Save item
+            Save
           </button>
         </form>
       </section>
 
       <section className="panel stack">
-        <div>
-          <h2>Search and filter</h2>
-          <p>Keep triage fast by narrowing the inbox to source, tag, status, or free text.</p>
-        </div>
-        <FilterBar defaults={filters} />
+        <h2>Filter</h2>
+        <FilterBar defaults={params} />
       </section>
 
       <section className="stack">
-        <ItemList items={items} emptyMessage="No items match the current inbox filters." />
+        <ItemList
+          items={items}
+          emptyMessage="No items match the current filters."
+        />
       </section>
     </div>
   );

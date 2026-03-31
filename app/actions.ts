@@ -5,21 +5,32 @@ import { redirect } from "next/navigation";
 import { getOpenAIClient } from "@/lib/openai";
 import { getCurrentUser } from "@/lib/queries";
 import { createClient } from "@/lib/supabase/server";
-import { buildSavedItemInsert, mergeExistingItem, normalizeManualUrl, parseLinkedInExport, parseRedditImport } from "@/lib/items";
-import { STATUSES } from "@/lib/types";
+import {
+  buildSavedItemInsert,
+  mergeExistingItem,
+  normalizeManualUrl,
+  parseLinkedInExport,
+  parseRedditImport,
+} from "@/lib/items";
+import type { SavedItemInsert } from "@/lib/types";
+import { isValidStatus, STATUSES } from "@/lib/types";
 import { parseTags } from "@/lib/utils";
 
 async function requireUser() {
   const user = await getCurrentUser();
-  if (!user) {
-    redirect("/auth");
-  }
+  if (!user) redirect("/auth");
   return user;
+}
+
+function revalidateAll() {
+  revalidatePath("/inbox");
+  revalidatePath("/queue");
+  revalidatePath("/archive");
 }
 
 async function upsertNormalizedItems(
   userId: string,
-  items: ReturnType<typeof buildSavedItemInsert>[],
+  items: SavedItemInsert[],
   sourceType: "manual" | "reddit" | "linkedin",
   filename?: string
 ) {
@@ -39,17 +50,16 @@ async function upsertNormalizedItems(
     if (existing) {
       duplicates += 1;
       const merged = mergeExistingItem(existing, item);
-      const { error } = await supabase.from("saved_items").update(merged).eq("id", existing.id);
-      if (!error) {
-        updated += 1;
-      }
+      const { error } = await supabase
+        .from("saved_items")
+        .update(merged)
+        .eq("id", existing.id);
+      if (!error) updated += 1;
       continue;
     }
 
     const { error } = await supabase.from("saved_items").insert(item);
-    if (!error) {
-      inserted += 1;
-    }
+    if (!error) inserted += 1;
   }
 
   if (filename) {
@@ -59,7 +69,7 @@ async function upsertNormalizedItems(
       filename,
       item_count: items.length,
       imported_count: inserted + updated,
-      duplicate_count: duplicates
+      duplicate_count: duplicates,
     });
   }
 
@@ -68,27 +78,51 @@ async function upsertNormalizedItems(
 
 export async function saveManualUrl(formData: FormData) {
   const user = await requireUser();
-  const normalized = await normalizeManualUrl(Object.fromEntries(formData.entries()));
+
+  let normalized;
+  try {
+    normalized = await normalizeManualUrl(
+      Object.fromEntries(formData.entries())
+    );
+  } catch {
+    redirect("/inbox?error=Invalid+URL+or+missing+fields");
+  }
+
   const payload = buildSavedItemInsert(user.id, normalized);
   await upsertNormalizedItems(user.id, [payload], "manual");
-  revalidatePath("/inbox");
-  revalidatePath("/queue");
-  revalidatePath("/archive");
+  revalidateAll();
   redirect("/inbox?saved=1");
 }
 
 export async function importReddit(formData: FormData) {
   const user = await requireUser();
   const file = formData.get("reddit_file");
-  if (!(file instanceof File)) {
-    redirect("/imports?error=Missing%20Reddit%20file");
+  if (!(file instanceof File) || file.size === 0) {
+    redirect("/imports?error=Missing+or+empty+Reddit+file");
   }
 
-  const content = await file.text();
-  const items = parseRedditImport(content).map((item) => buildSavedItemInsert(user.id, item));
-  const result = await upsertNormalizedItems(user.id, items, "reddit", file.name);
+  let items: SavedItemInsert[];
+  try {
+    const content = await file.text();
+    items = parseRedditImport(content).map((item) =>
+      buildSavedItemInsert(user.id, item)
+    );
+  } catch {
+    redirect("/imports?error=Failed+to+parse+Reddit+JSON.+Check+the+file+format.");
+  }
+
+  if (items.length === 0) {
+    redirect("/imports?error=No+items+found+in+the+Reddit+export");
+  }
+
+  const result = await upsertNormalizedItems(
+    user.id,
+    items,
+    "reddit",
+    file.name
+  );
+  revalidateAll();
   revalidatePath("/imports");
-  revalidatePath("/inbox");
   redirect(
     `/imports?source=reddit&inserted=${result.inserted}&updated=${result.updated}&duplicates=${result.duplicates}`
   );
@@ -97,47 +131,63 @@ export async function importReddit(formData: FormData) {
 export async function importLinkedIn(formData: FormData) {
   const user = await requireUser();
   const file = formData.get("linkedin_file");
-  if (!(file instanceof File)) {
-    redirect("/imports?error=Missing%20LinkedIn%20file");
+  if (!(file instanceof File) || file.size === 0) {
+    redirect("/imports?error=Missing+or+empty+LinkedIn+file");
   }
 
-  const content = await file.text();
-  const items = parseLinkedInExport(content).map((item) => buildSavedItemInsert(user.id, item));
-  const result = await upsertNormalizedItems(user.id, items, "linkedin", file.name);
+  let items: SavedItemInsert[];
+  try {
+    const content = await file.text();
+    items = parseLinkedInExport(content).map((item) =>
+      buildSavedItemInsert(user.id, item)
+    );
+  } catch {
+    redirect(
+      "/imports?error=Failed+to+parse+LinkedIn+CSV.+Check+the+file+format."
+    );
+  }
+
+  if (items.length === 0) {
+    redirect("/imports?error=No+items+found+in+the+LinkedIn+export");
+  }
+
+  const result = await upsertNormalizedItems(
+    user.id,
+    items,
+    "linkedin",
+    file.name
+  );
+  revalidateAll();
   revalidatePath("/imports");
-  revalidatePath("/inbox");
   redirect(
     `/imports?source=linkedin&inserted=${result.inserted}&updated=${result.updated}&duplicates=${result.duplicates}`
   );
 }
 
 export async function updateItemStatus(formData: FormData) {
-  await requireUser();
+  const user = await requireUser();
   const supabase = await createClient();
   const itemId = String(formData.get("item_id") ?? "");
   const status = String(formData.get("status") ?? "");
 
-  if (!STATUSES.includes(status as (typeof STATUSES)[number])) {
-    return;
-  }
+  if (!isValidStatus(status)) return;
 
   await supabase
     .from("saved_items")
     .update({
       status,
-      queued_at: status === "read_next" ? new Date().toISOString() : null,
-      archived_at: status === "archived" ? new Date().toISOString() : null
+      queued_at: status === "read_next" ? new Date().toISOString() : undefined,
+      archived_at: status === "archived" ? new Date().toISOString() : undefined,
     })
-    .eq("id", itemId);
+    .eq("id", itemId)
+    .eq("user_id", user.id);
 
-  revalidatePath("/inbox");
-  revalidatePath("/queue");
-  revalidatePath("/archive");
+  revalidateAll();
   revalidatePath(`/items/${itemId}`);
 }
 
 export async function updateItemDetails(formData: FormData) {
-  await requireUser();
+  const user = await requireUser();
   const supabase = await createClient();
   const itemId = String(formData.get("item_id") ?? "");
   const title = String(formData.get("title") ?? "");
@@ -146,53 +196,65 @@ export async function updateItemDetails(formData: FormData) {
 
   await supabase
     .from("saved_items")
-    .update({
-      title: title || null,
-      note: note || null,
-      tags
-    })
-    .eq("id", itemId);
+    .update({ title: title || null, note: note || null, tags })
+    .eq("id", itemId)
+    .eq("user_id", user.id);
 
   revalidatePath(`/items/${itemId}`);
-  revalidatePath("/inbox");
+  revalidateAll();
 }
 
 export async function generateItemSummary(formData: FormData) {
-  await requireUser();
+  const user = await requireUser();
   const supabase = await createClient();
   const itemId = String(formData.get("item_id") ?? "");
 
-  const { data: item } = await supabase.from("saved_items").select("*").eq("id", itemId).single();
+  const { data: item } = await supabase
+    .from("saved_items")
+    .select("*")
+    .eq("id", itemId)
+    .eq("user_id", user.id)
+    .single();
+
   if (!item) return;
 
-  await supabase.from("saved_items").update({ ai_summary_status: "pending" }).eq("id", itemId);
+  await supabase
+    .from("saved_items")
+    .update({ ai_summary_status: "pending" })
+    .eq("id", itemId);
 
   try {
     const openai = getOpenAIClient();
-    const response = await openai.responses.create({
-      model: "gpt-5-mini",
-      input: [
+    const response = await openai.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [
         {
           role: "system",
           content:
-            "You summarize saved links for later reading. Return 3 short bullets that explain why the item may be worth reading and what to expect."
+            "You summarize saved links for later reading. Return 2-3 short bullet points explaining why the item may be worth reading and what to expect. Be concise.",
         },
         {
           role: "user",
-          content: `Title: ${item.title ?? "Unknown"}\nURL: ${item.canonical_url}\nExcerpt: ${item.excerpt ?? "None"}\nNotes: ${item.note ?? "None"}`
-        }
-      ]
+          content: `Title: ${item.title ?? "Unknown"}\nURL: ${item.canonical_url}\nExcerpt: ${item.excerpt ?? "None"}\nNotes: ${item.note ?? "None"}`,
+        },
+      ],
+      max_tokens: 300,
     });
+
+    const summary = response.choices[0]?.message?.content ?? null;
 
     await supabase
       .from("saved_items")
       .update({
-        ai_summary: response.output_text,
-        ai_summary_status: "complete"
+        ai_summary: summary,
+        ai_summary_status: summary ? "complete" : "failed",
       })
       .eq("id", itemId);
   } catch {
-    await supabase.from("saved_items").update({ ai_summary_status: "failed" }).eq("id", itemId);
+    await supabase
+      .from("saved_items")
+      .update({ ai_summary_status: "failed" })
+      .eq("id", itemId);
   }
 
   revalidatePath(`/items/${itemId}`);

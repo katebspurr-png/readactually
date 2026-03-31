@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { updateItemStatus } from "@/app/actions";
 import type { SavedItemRow } from "@/lib/types";
-import { truncate } from "@/lib/utils";
+import { formatDate, truncate } from "@/lib/utils";
 import { StatusBadge } from "@/components/status-badge";
 
 export function ItemCard({ item }: { item: SavedItemRow }) {
@@ -15,37 +15,48 @@ export function ItemCard({ item }: { item: SavedItemRow }) {
 
       <div>
         <h3>{item.title || item.canonical_url}</h3>
-        <p className="muted">{truncate(item.excerpt || item.note || item.canonical_url)}</p>
+        <p className="muted">
+          {truncate(item.excerpt || item.note || item.canonical_url)}
+        </p>
       </div>
 
       <div className="item-meta">
         {item.author_name ? <span>By {item.author_name}</span> : null}
-        {item.saved_at ? <span>Saved {new Date(item.saved_at).toLocaleDateString()}</span> : null}
+        {item.saved_at ? <span>Saved {formatDate(item.saved_at)}</span> : null}
       </div>
 
       {item.tags?.length ? (
         <div className="tag-row">
           {item.tags.map((tag) => (
-            <span className="tag" key={tag}>
+            <Link
+              className="tag"
+              href={`/inbox?tag=${encodeURIComponent(tag)}`}
+              key={tag}
+            >
               {tag}
-            </span>
+            </Link>
           ))}
         </div>
       ) : null}
 
       <div className="toolbar">
         <Link className="button-secondary" href={`/items/${item.id}`}>
-          Open item
+          Open
         </Link>
-        <a className="button-secondary" href={item.original_url} target="_blank" rel="noreferrer">
-          Read original
+        <a
+          className="button-secondary"
+          href={item.original_url}
+          target="_blank"
+          rel="noreferrer"
+        >
+          Read
         </a>
         {item.status !== "read_next" ? (
           <form action={updateItemStatus}>
             <input name="item_id" type="hidden" value={item.id} />
             <input name="status" type="hidden" value="read_next" />
             <button className="button-secondary" type="submit">
-              Queue next
+              Queue
             </button>
           </form>
         ) : null}

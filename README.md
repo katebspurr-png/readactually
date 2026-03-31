@@ -1,80 +1,117 @@
 # Saved Content Inbox
 
-Saved Content Inbox is a lean MVP for importing saved content from a few practical sources, then moving it through an inbox-to-reading workflow.
+A personal web app to import saved posts/links from Reddit, LinkedIn, and manual URLs, then organize and actually read them.
 
-## What V1 includes
+## Features
 
-- Supabase Auth with email/password
-- Manual URL save
-- Reddit saved export import
-- LinkedIn export upload
-- Normalized saved item schema
-- Inbox, Read Next, and Archive screens
-- Search, filters, tags, notes
-- Basic AI summaries with OpenAI
+- **Auth** - Email/password sign-up and sign-in via Supabase Auth
+- **Manual URL save** - Paste any URL with optional title, tags, note, and status
+- **Reddit import** - Upload JSON exports of saved posts
+- **LinkedIn import** - Upload CSV exports with URL columns
+- **Inbox/Queue/Archive** - Triage items through a reading workflow
+- **Search & filter** - Filter by source, status, tag, or free text search
+- **Tags & notes** - Organize items with tags and personal notes
+- **AI summaries** - On-demand GPT-4o-mini summaries to help with triage
+- **Deduplication** - URLs are canonicalized and hashed; duplicates merge metadata
 
 ## Stack
 
-- Next.js App Router
-- Supabase Auth + Postgres
-- Postgres row-level security
-- OpenAI API for summaries
+- **Next.js 16** (App Router, server actions)
+- **React 19**
+- **Supabase** (Postgres + Auth + RLS)
+- **OpenAI API** (gpt-4o-mini for summaries)
+- **TypeScript** (strict mode)
+- **Zod** (input validation)
 
 ## Setup
 
-1. Install dependencies:
+### 1. Install dependencies
 
 ```bash
 npm install
 ```
 
-2. Copy env vars:
+### 2. Create a Supabase project
+
+Go to [supabase.com](https://supabase.com), create a new project, and note:
+- Project URL
+- Anon/publishable key
+- Service role key
+
+### 3. Run the schema
+
+Open the Supabase SQL Editor and paste the contents of `supabase/schema.sql`. Run it.
+
+### 4. Configure environment
+
+Copy `.env.example` to `.env.local` and fill in the values:
 
 ```bash
 cp .env.example .env.local
 ```
 
-3. Fill in:
+```
+NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
+NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=your-anon-key
+SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
+OPENAI_API_KEY=sk-your-openai-key
+```
 
-- `NEXT_PUBLIC_SUPABASE_URL`
-- `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`
-- `SUPABASE_SERVICE_ROLE_KEY`
-- `OPENAI_API_KEY`
-
-4. In Supabase SQL Editor, run [supabase/schema.sql](/Users/katespurr/Documents/New project/supabase/schema.sql).
-
-5. Start the app:
+### 5. Start the dev server
 
 ```bash
 npm run dev
 ```
 
-## Import expectations
+Open [http://localhost:3000](http://localhost:3000), create an account, and start saving content.
+
+## Item statuses
+
+| Status | Purpose |
+|--------|---------|
+| `inbox` | Default landing spot for new saves and imports |
+| `read_next` | Deliberately queued for reading soon |
+| `reading` | Currently being read |
+| `completed` | Finished reading |
+| `reference` | Keeping for reference, not necessarily to read |
+| `archived` | Done or no longer relevant |
+
+## Import formats
 
 ### Reddit
-
-- Upload a JSON file from a Reddit saved export or a compatible dump containing saved post/link objects.
-- The app extracts URLs, titles, authors, timestamps, and the raw payload for reference.
+Upload a JSON file. The importer handles these shapes:
+- Array of post objects
+- Object with `children` or `data` array
+- Each post can have `data` wrapper (Reddit API style)
 
 ### LinkedIn
+Upload a CSV with a header row. The importer looks for URL columns named `URL`, `Url`, `Link`, or `url`, and optionally maps `Title`, `Author`, `Description`, etc.
 
-- Upload a CSV export that includes a URL column such as `URL`, `Link`, or `Url`.
-- The importer keeps the row payload and maps title, author, description, and saved date when present.
+## Deduplication
 
-### Manual
+URLs are canonicalized before saving:
+- Lowercase hostnames
+- Strip hash fragments
+- Remove tracking params (utm_*, fbclid, gclid, etc.)
+- Normalize trailing slashes
+- SHA-256 hash for uniqueness check per user
 
-- Paste any URL, optionally add a title, note, tags, and target status.
-- The app attempts lightweight metadata extraction from the page title and description.
+When a duplicate is detected during import, tags are merged and empty fields are filled from the incoming data rather than creating a new row.
 
-## Dedupe behavior
+## Project structure
 
-- URLs are canonicalized before insert.
-- Common tracking params are stripped.
-- Hash fragments are ignored.
-- Trailing slashes are normalized.
-- A per-user unique constraint on `url_hash` prevents duplicate saves.
-- Re-imports merge tags and fill in missing metadata instead of creating new rows.
-
-## Product stance
-
-This MVP intentionally favors a simple hybrid ingestion model and a usable triage workflow over broad platform coverage or deep content processing.
+```
+app/              Next.js App Router pages and actions
+  (app)/          Authenticated routes (inbox, queue, archive, imports, items)
+  auth/           Login/signup
+components/       Reusable UI components
+lib/              Core logic
+  items.ts        Parsers, normalization, dedup merge
+  queries.ts      Database queries
+  types.ts        TypeScript types and constants
+  utils.ts        URL canonicalization, helpers
+  openai.ts       OpenAI client
+  supabase/       Supabase client factories
+supabase/
+  schema.sql      Database schema (tables, RLS, indexes, triggers)
+```

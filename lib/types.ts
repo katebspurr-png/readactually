@@ -4,13 +4,21 @@ export const STATUSES = [
   "reading",
   "completed",
   "reference",
-  "archived"
+  "archived",
 ] as const;
 
 export const SOURCE_TYPES = ["manual", "reddit", "linkedin"] as const;
 
+export const AI_SUMMARY_STATUSES = [
+  "idle",
+  "pending",
+  "complete",
+  "failed",
+] as const;
+
 export type ItemStatus = (typeof STATUSES)[number];
 export type SourceType = (typeof SOURCE_TYPES)[number];
+export type AiSummaryStatus = (typeof AI_SUMMARY_STATUSES)[number];
 
 export type SavedItemRow = {
   id: string;
@@ -26,9 +34,9 @@ export type SavedItemRow = {
   author_name: string | null;
   excerpt: string | null;
   note: string | null;
-  tags: string[] | null;
+  tags: string[];
   ai_summary: string | null;
-  ai_summary_status: "idle" | "pending" | "complete" | "failed";
+  ai_summary_status: AiSummaryStatus;
   status: ItemStatus;
   saved_at: string | null;
   published_at: string | null;
@@ -51,9 +59,9 @@ export type SavedItemInsert = {
   author_name?: string | null;
   excerpt?: string | null;
   note?: string | null;
-  tags?: string[] | null;
+  tags?: string[];
   ai_summary?: string | null;
-  ai_summary_status?: "idle" | "pending" | "complete" | "failed";
+  ai_summary_status?: AiSummaryStatus;
   status: ItemStatus;
   saved_at?: string | null;
   published_at?: string | null;
@@ -73,3 +81,11 @@ export type ImportResult = {
   updated: number;
   duplicates: number;
 };
+
+export function isValidStatus(value: string): value is ItemStatus {
+  return (STATUSES as readonly string[]).includes(value);
+}
+
+export function isValidSource(value: string): value is SourceType {
+  return (SOURCE_TYPES as readonly string[]).includes(value);
+}
