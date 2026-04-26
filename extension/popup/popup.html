@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ReadActually</title>
+  <link rel="stylesheet" href="popup.css" />
+</head>
+<body>
+  <header>
+    <span class="logo">ReadActually</span>
+    <button id="gear-btn" title="Settings" aria-label="Settings">
+      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="3"/>
+        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+      </svg>
+    </button>
+  </header>
+
+  <!-- Saving view -->
+  <div id="view-saving" class="view">
+    <div class="spinner"></div>
+    <p class="status-text">Saving…</p>
+  </div>
+
+  <!-- Success view -->
+  <div id="view-success" class="view hidden">
+    <div class="check-icon">
+      <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="20 6 9 17 4 12"/>
+      </svg>
+    </div>
+    <p id="success-label" class="status-text">Saved to ReadActually</p>
+    <p id="success-title" class="item-title"></p>
+    <div id="success-tags" class="tag-list"></div>
+  </div>
+
+  <!-- Error view -->
+  <div id="view-error" class="view hidden">
+    <div class="error-icon">
+      <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="10"/>
+        <line x1="12" y1="8" x2="12" y2="12"/>
+        <line x1="12" y1="16" x2="12.01" y2="16"/>
+      </svg>
+    </div>
+    <p id="error-message" class="error-text">Something went wrong.</p>
+    <button id="retry-btn" class="btn">Retry</button>
+  </div>
+
+  <!-- Settings view -->
+  <div id="view-settings" class="view hidden">
+    <div class="field">
+      <label for="input-api-url">App URL</label>
+      <input id="input-api-url" type="url" placeholder="http://localhost:3000" autocomplete="off" />
+    </div>
+    <div class="field">
+      <label for="input-email">Email</label>
+      <input id="input-email" type="email" placeholder="you@example.com" autocomplete="email" />
+    </div>
+    <div class="field">
+      <label for="input-password">Password</label>
+      <input id="input-password" type="password" placeholder="••••••••" autocomplete="current-password" />
+    </div>
+    <p id="settings-error" class="error-text hidden"></p>
+    <button id="settings-save-btn" class="btn">Connect</button>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>
